@@ -1,0 +1,13 @@
+addons/goome/bin/
+example/addons/
+example/.godot/
+tests/project/addons/
+tests/project/.godot/
+godot/
+out/
+*.zip
+gdext.*/
+tests/project/icons_c.txt
+tests/project/*.import
+tests/build/
+example/assets/*.import

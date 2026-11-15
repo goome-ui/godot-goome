@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  upload:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: godot-goome
+          path: addon/
+      - name: zip the addon
+        run: |
+          test -s addon/addons/goome/goome.gdextension || { echo "no addon in the artifact"; exit 1; }
+          (cd addon && zip -qr "$GITHUB_WORKSPACE/godot-goome-${TAG#v}.zip" addons)
+          unzip -l "godot-goome-${TAG#v}.zip" | tail -n 5
+      - name: upload
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "goome ${TAG#v}" --notes "goome ${TAG#v}"
+          gh release upload "$TAG" "godot-goome-${TAG#v}.zip" --clobber
