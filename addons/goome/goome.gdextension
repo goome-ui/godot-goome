@@ -1,0 +1,12 @@
+[configuration]
+
+entry_symbol = "goome_gd_init"
+compatibility_minimum = "4.4"
+reloadable = false
+
+[libraries]
+
+linux.x86_64 = "res://addons/goome/bin/libgoome.linux.x86_64.so"
+linux.arm64 = "res://addons/goome/bin/libgoome.linux.arm64.so"
+windows.x86_64 = "res://addons/goome/bin/goome.windows.x86_64.dll"
+macos = "res://addons/goome/bin/libgoome.macos.universal.dylib"
