@@ -1,0 +1,108 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  GODOT: 4.7.2-stable
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build: ""
+            godot: linux.x86_64.zip
+            bin: Godot_v4.7.2-stable_linux.x86_64
+          - os: windows-latest
+            build: ""
+            godot: win64.exe.zip
+            bin: Godot_v4.7.2-stable_win64_console.exe
+          - os: macos-latest
+            build: universal
+            godot: macos.universal.zip
+            bin: Godot.app/Contents/MacOS/Godot
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: WERROR=1 ./build.sh ${{ matrix.build }}
+      - name: check the lib
+        run: |
+          ls -l addons/goome/bin
+          if [ "$RUNNER_OS" = macOS ]; then lipo -archs addons/goome/bin/libgoome.macos.universal.dylib; fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            nm -D --defined-only addons/goome/bin/libgoome.linux.x86_64.so | grep -q goome_gd_init
+            ! ldd addons/goome/bin/libgoome.linux.x86_64.so | grep -v "libc.so\|ld-linux\|vdso"
+          fi
+      - name: get godot
+        run: |
+          mkdir -p godot
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot/releases/download/$GODOT/Godot_v${GODOT}_${{ matrix.godot }}"
+          unzip -q godot.zip -d godot
+      - name: headless test
+        run: tests/run.sh "godot/${{ matrix.bin }}"
+      - name: example runs
+        if: runner.os == 'Linux'
+        run: |
+          rm -rf example/addons
+          mkdir -p example/addons
+          cp -r addons/goome example/addons/goome
+          "godot/${{ matrix.bin }}" --headless --path example --import > /dev/null 2>&1 || true
+          out=$("godot/${{ matrix.bin }}" --headless --path example --quit-after 120 2>&1)
+          out+=$("godot/${{ matrix.bin }}" --headless --path example res://custom.tscn --quit-after 120 2>&1)
+          out+=$("godot/${{ matrix.bin }}" --headless --path example res://skinned.tscn --quit-after 120 2>&1)
+          echo "$out"
+          ! echo "$out" | grep -q "SCRIPT ERROR\|^ERROR"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ runner.os }}
+          path: addons/goome/bin/
+
+  oldest-godot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./build.sh
+      - name: godot 4.4
+        run: |
+          mkdir -p godot
+          curl -fsSL -o godot.zip https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
+          unzip -q godot.zip -d godot
+          tests/run.sh godot/Godot_v4.4.1-stable_linux.x86_64
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: bins
+          merge-multiple: true
+      - name: zip the addon
+        run: |
+          mkdir -p out/addons
+          cp -r addons/goome out/addons/goome
+          mkdir -p out/addons/goome/bin
+          cp bins/* out/addons/goome/bin/
+          cp LICENSE out/addons/goome/LICENSE
+          cp native/gdextension/LICENSE.txt out/addons/goome/LICENSE.godot.txt
+          ls -l out/addons/goome/bin
+          for f in libgoome.linux.x86_64.so goome.windows.x86_64.dll libgoome.macos.universal.dylib; do
+            test -s "out/addons/goome/bin/$f" || { echo "missing $f"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-goome
+          path: out/
