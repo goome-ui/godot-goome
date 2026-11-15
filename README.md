@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Godot-4.4%2B-6fdc5f?style=flat-square&logo=godotengine&logoColor=1b1d22&labelColor=6fdc5f" alt="Godot 4.4+">
-  <img src="https://img.shields.io/badge/GDExtension-plain%20C-1b1d22?style=flat-square&labelColor=6fdc5f" alt="GDExtension in plain C">
+  <img src="https://goome-ui.github.io/docs/assets/badges/godot-44.svg" alt="Godot 4.4+">
+  <img src="https://goome-ui.github.io/docs/assets/badges/gdextension-plain-c.svg" alt="GDExtension in plain C">
   <img src="https://img.shields.io/badge/Linux-x86__64-1b1d22?style=flat-square&logo=linux&logoColor=white" alt="Linux">
   <img src="https://img.shields.io/badge/Windows-x86__64-1b1d22?style=flat-square&logo=windows11&logoColor=white" alt="Windows">
   <img src="https://img.shields.io/badge/macOS-arm64%20%2B%20x86__64-1b1d22?style=flat-square&logo=apple&logoColor=white" alt="macOS">
