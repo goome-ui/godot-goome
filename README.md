@@ -314,6 +314,12 @@ Read <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> before you send one.
 </p>
 </details>
 
+<p align="center">
+<b>🫶 Contributors 🫶</b><br>
+Thanks to everyone who helped out!<br> <br>
+<a href="https://github.com/goome-ui/godot-goome/graphs/contributors"><img src="https://contrib.rocks/image?repo=goome-ui/godot-goome" alt="contributors"></a>
+</p>
+
 <details>
 <summary align="center"><b>⚖️ License ⚖️</b></summary>
 
