@@ -355,6 +355,18 @@ void gd_dict_put(gd_var *d, const char *key, gd_var *val)
     gd.destroy(val);
 }
 
+void gd_array_var(gd_var *v)
+{
+    GDExtensionCallError ce = {0};
+    gd.construct((GDExtensionVariantType)T_ARRAY, v, NULL, 0, &ce);
+}
+
+void gd_array_push(gd_var *a, gd_var *val)
+{
+    gd_call(a, "append", NULL, 1, val);
+    gd.destroy(val);
+}
+
 int gd_call(gd_var *self, const char *method, gd_var *ret, int n, ...)
 {
     GDExtensionConstVariantPtr args[8];
@@ -527,7 +539,7 @@ static void method_ptrcall(void *ud, GDExtensionClassInstancePtr inst, const GDE
         GDExtensionObjectPtr o = gd_as_obj(&out);
         if (m->refc) gd.ref_set(ret, o);
         else *(GDExtensionObjectPtr *)ret = o;
-    } else if (m->ret == T_STRING || m->ret == T_DICT || m->ret == T_DOUBLES) {
+    } else if (m->ret == T_STRING || m->ret == T_DICT || m->ret == T_DOUBLES || m->ret == T_ARRAY) {
         gd.dtor[m->ret](ret);
         gd.to[m->ret](ret, &out);
     } else
@@ -607,4 +619,11 @@ void gd_register_signal(const char *cls, const char *name, const char *arg, cons
 {
     GDExtensionPropertyInfo p = prop(T_OBJECT, arg, arg_cls);
     gd.register_signal(gd.lib, SN(cls), SN(name), &p, 1);
+}
+
+void gd_register_signal_args(const char *cls, const char *name, int n, const char *const *args, const int *types)
+{
+    GDExtensionPropertyInfo p[8];
+    for (int i = 0; i < n && i < 8; i++) p[i] = prop(types[i], args[i], NULL);
+    gd.register_signal(gd.lib, SN(cls), SN(name), p, n < 8 ? n : 8);
 }

@@ -841,9 +841,30 @@ static goome_font *system_font(gd_ui *ui, const gd_var *v)
     return a ? a->font : NULL;
 }
 
+static goome_font *bytes_font(gd_ui *ui, const gd_var *v)
+{
+    gd_packed raw;
+    gd.to[T_BYTES](&raw, (GDExtensionVariantPtr)v);
+    gd_var copy;
+    gd.copy(&copy, v);
+    int n = int_of(&copy, "size");
+    gd.destroy(&copy);
+    uint8_t *p = n > 0 ? gd.bytes_at(&raw, 0) : NULL;
+    uint32_t h = 2166136261u;
+    for (int i = 0; p && i < n; i++) h = (h ^ p[i]) * 16777619u;
+    gd_asset *a = p ? asset(ui, ((int64_t)n << 32) | h, -3, -3) : NULL;
+    if (a && !a->font) {
+        a->font = goome_font_load_mem(p, (size_t)n, 1);
+        if (!a->font) gd_err("goome: those bytes arent a ttf or otf font");
+    }
+    gd.dtor[T_BYTES](&raw);
+    return a ? a->font : NULL;
+}
+
 static goome_font *font_of(gd_ui *ui, const gd_var *v)
 {
     if (gd_is(v, T_STRING) || gd_is(v, T_SN)) return system_font(ui, v);
+    if (gd_is(v, T_BYTES)) return bytes_font(ui, v);
     if (!gd_as_obj(v)) return NULL;
     gd_var f, data, name;
     gd.copy(&f, v);
@@ -1297,7 +1318,8 @@ static void d_rect(void *inst, gd_args *a, gd_var *ret)
 {
     DRAW;
     gd_rect2 r = box(a, 0);
-    goome_draw_rrect(c, r.x, r.y, r.w, r.h, radii_of(a->v[2]), col(a, 1));
+    if (gd_is(a->v[2], T_NIL)) goome_draw_rect(c, r.x, r.y, r.w, r.h, col(a, 1));
+    else goome_draw_rrect(c, r.x, r.y, r.w, r.h, radii_of(a->v[2]), col(a, 1));
 }
 
 static void d_outline(void *inst, gd_args *a, gd_var *ret)
@@ -1360,11 +1382,17 @@ static void d_polygon(void *inst, gd_args *a, gd_var *ret)
 
 static double text_px(goome_ui *u, double size) { return size > 0 ? size : goome_ui_theme(u)->font_size; }
 
+static goome_font *font_or_theme(gd_ui *ui, goome_ui *u, const gd_var *v)
+{
+    goome_font *f = gd_is(v, T_NIL) ? NULL : font_of(ui, v);
+    return f ? f : goome_ui_theme(u)->font;
+}
+
 static void d_text(void *inst, gd_args *a, gd_var *ret)
 {
     DRAW;
     gd_vec2 p = at(a, 0);
-    rf(ret, goome_text(c, goome_ui_theme(u)->font, text_px(u, F(3)), p.x, p.y, S(1), col(a, 2)));
+    rf(ret, goome_text(c, font_or_theme(ui, u, a->v[4]), text_px(u, F(3)), p.x, p.y, S(1), col(a, 2)));
 }
 
 static void d_text_size(void *inst, gd_args *a, gd_var *ret)
@@ -1372,7 +1400,7 @@ static void d_text_size(void *inst, gd_args *a, gd_var *ret)
     gd_ui *ui = inst;
     goome_ui *u = live(ui);
     if (!u) return;
-    goome_font *f = goome_ui_theme(u)->font;
+    goome_font *f = font_or_theme(ui, u, a->v[2]);
     double size = text_px(u, F(1)), h = 0, w = goome_text_measure(f, size, S(0), &h);
     if (h <= 0) h = goome_text_line_height(f, size);
     gd.destroy(ret);
@@ -1390,6 +1418,107 @@ static void d_pop_clip(void *inst, gd_args *a, gd_var *ret)
 {
     DRAW;
     goome_clip_pop(c);
+}
+
+static void x_ease(void *inst, gd_args *a, gd_var *ret) { rf(ret, goome_ease(I(0), F(1))); }
+
+static void x_anim(void *inst, gd_args *a, gd_var *ret)
+{
+    gd_ui *ui = inst;
+    goome_ui *u = live(ui);
+    rf(ret, goome_ui_anim(u, S(0), F(1), F(2), I(3)));
+}
+
+static void x_anim_color(void *inst, gd_args *a, gd_var *ret)
+{
+    gd_ui *ui = inst;
+    goome_ui *u = live(ui);
+    gd.destroy(ret);
+    gd_var_color(ret, color_of(goome_ui_anim_color(u, S(0), argb_of(gd_as_color(a->v[1])), F(2), I(3))));
+}
+
+static void x_animating(void *inst, gd_args *a, gd_var *ret)
+{
+    gd_ui *ui = inst;
+    rb(ret, ui->view && goome_ui_animating(ui->view->u));
+}
+
+static void x_text_dir(void *inst, gd_args *a, gd_var *ret)
+{
+    goome_text_dir(I(0));
+    touch(inst);
+}
+
+static void x_font_fallback(void *inst, gd_args *a, gd_var *ret)
+{
+    gd_ui *ui = inst;
+    goome_font *f = NULL, *fb = font_of(ui, a->v[1]);
+    if (!gd_is(a->v[0], T_NIL)) f = font_of(ui, a->v[0]);
+    else if (ui->view && ui->view->u) f = goome_ui_theme(ui->view->u)->font;
+    if (f && fb) goome_font_fallback(f, fb);
+    touch(ui);
+    rb(ret, f && fb);
+}
+
+static void x_a11y(void *inst, gd_args *a, gd_var *ret)
+{
+    gd_ui *ui = inst;
+    if (!ui->view) return;
+    ui->view->a11y = B(0);
+    if (ui->view->u) goome_ui_a11y(ui->view->u, B(0));
+    touch(ui);
+}
+
+static void x_a11y_role(void *inst, gd_args *a, gd_var *ret)
+{
+    UI;
+    goome_ui_a11y_role(u, I(0), S(1));
+}
+
+static void x_a11y_value(void *inst, gd_args *a, gd_var *ret)
+{
+    UI;
+    goome_ui_a11y_value(u, S(0));
+}
+
+static void put_int(gd_var *d, const char *key, int64_t x)
+{
+    gd_var v;
+    gd_var_int(&v, x);
+    gd_dict_put(d, key, &v);
+}
+
+static void put_str(gd_var *d, const char *key, const char *s)
+{
+    gd_var v;
+    gd_var_cstr(&v, s);
+    gd_dict_put(d, key, &v);
+}
+
+static void x_a11y_tree(void *inst, gd_args *a, gd_var *ret)
+{
+    gd_ui *ui = inst;
+    gd.destroy(ret);
+    gd_array_var(ret);
+    goome_ui *u = ui->view ? ui->view->u : NULL;
+    int n = goome_a11y_tree(u, NULL, 0);
+    goome_a11y_node *nodes = n > 0 ? malloc(sizeof(*nodes) * (size_t)n) : NULL;
+    if (!nodes) return;
+    n = goome_a11y_tree(u, nodes, n);
+    for (int i = 0; i < n; i++) {
+        goome_a11y_node *k = &nodes[i];
+        gd_var d, r;
+        gd_dict_var(&d);
+        put_int(&d, "role", k->role), put_int(&d, "parent", k->parent), put_int(&d, "states", k->states);
+        gd_var_rect2(&r, (gd_rect2){(float)k->x, (float)k->y, (float)k->w, (float)k->h});
+        gd_dict_put(&d, "rect", &r);
+        put_str(&d, "label", k->label), put_str(&d, "value", k->value);
+        put_int(&d, "id", k->id);
+        put_num(&d, "num", k->num), put_num(&d, "min", k->min), put_num(&d, "max", k->max);
+        put_int(&d, "caret", k->caret);
+        gd_array_push(ret, &d);
+    }
+    free(nodes);
 }
 
 #define M0(n, f, r) {n, f, r, NULL, {{0}}, 0, 0, 0, {{{0}}}}
@@ -1528,8 +1657,18 @@ static gd_method methods[] = {
     M("draw_arc", d_arc, T_VOID, ARG("center", T_VEC2), FLT("radius"), FLT("from_angle"), FLT("to_angle"), ARG("color", T_COLOR), FLTD("width", "1")),
     M("draw_line", d_line, T_VOID, ARG("from", T_VEC2), ARG("to", T_VEC2), ARG("color", T_COLOR), FLTD("width", "1")),
     M("draw_polygon", d_polygon, T_VOID, ARG("points", T_VEC2S), ARG("color", T_COLOR)),
-    M("draw_text", d_text, T_FLOAT, ARG("position", T_VEC2), STR("text"), ARG("color", T_COLOR), FLTD("size", "0")),
-    M("text_size", d_text_size, T_VEC2, STR("text"), FLTD("size", "0")),
+    M("draw_text", d_text, T_FLOAT, ARG("position", T_VEC2), STR("text"), ARG("color", T_COLOR), FLTD("size", "0"), ARGD("font", T_NIL, "")),
+    M("text_size", d_text_size, T_VEC2, STR("text"), FLTD("size", "0"), ARGD("font", T_NIL, "")),
+    M("ease", x_ease, T_FLOAT, INT("ease"), FLT("t")),
+    M("anim", x_anim, T_FLOAT, STR("id"), FLT("target"), FLTD("ms", "200"), INTD("ease", "2")),
+    M("anim_color", x_anim_color, T_COLOR, STR("id"), ARG("target", T_COLOR), FLTD("ms", "200"), INTD("ease", "2")),
+    M0("animating", x_animating, T_BOOL),
+    M("text_dir", x_text_dir, T_VOID, INT("dir")),
+    M("font_fallback", x_font_fallback, T_BOOL, ARGD("font", T_NIL, ""), ARGD("fallback", T_NIL, "")),
+    M("a11y", x_a11y, T_VOID, BOOL("on")),
+    M("a11y_role", x_a11y_role, T_VOID, INT("role"), STRD("label", "")),
+    M("a11y_value", x_a11y_value, T_VOID, STR("value")),
+    M0("a11y_tree", x_a11y_tree, T_ARRAY),
     M("push_clip", d_push_clip, T_VOID, ARG("rect", T_RECT2)),
     M0("pop_clip", d_pop_clip, T_VOID),
     {NULL},
@@ -1635,6 +1774,37 @@ static const gd_const consts[] = {
     {GOOME_EASE_IN_OUT, "EASE_IN_OUT", "Ease"},
     {GOOME_EASE_BACK, "EASE_BACK", "Ease"},
     {GOOME_EASE_CUSTOM, "EASE_CUSTOM", "Ease"},
+    {GOOME_EASE_IN, "EASE_IN", "Ease"},
+    {GOOME_EASE_SPRING, "EASE_SPRING", "Ease"},
+    {GOOME_EASE_BOUNCE, "EASE_BOUNCE", "Ease"},
+    {GOOME_DIR_AUTO, "DIR_AUTO", "TextDir"},
+    {GOOME_DIR_LTR, "DIR_LTR", "TextDir"},
+    {GOOME_DIR_RTL, "DIR_RTL", "TextDir"},
+    {GOOME_ROLE_NONE, "ROLE_NONE", "Role"},
+    {GOOME_ROLE_WINDOW, "ROLE_WINDOW", "Role"},
+    {GOOME_ROLE_BUTTON, "ROLE_BUTTON", "Role"},
+    {GOOME_ROLE_CHECKBOX, "ROLE_CHECKBOX", "Role"},
+    {GOOME_ROLE_RADIO, "ROLE_RADIO", "Role"},
+    {GOOME_ROLE_SLIDER, "ROLE_SLIDER", "Role"},
+    {GOOME_ROLE_TEXT, "ROLE_TEXT", "Role"},
+    {GOOME_ROLE_INPUT, "ROLE_INPUT", "Role"},
+    {GOOME_ROLE_COMBO, "ROLE_COMBO", "Role"},
+    {GOOME_ROLE_LIST, "ROLE_LIST", "Role"},
+    {GOOME_ROLE_ITEM, "ROLE_ITEM", "Role"},
+    {GOOME_ROLE_TAB, "ROLE_TAB", "Role"},
+    {GOOME_ROLE_MENU, "ROLE_MENU", "Role"},
+    {GOOME_ROLE_MENUITEM, "ROLE_MENUITEM", "Role"},
+    {GOOME_ROLE_TABLE, "ROLE_TABLE", "Role"},
+    {GOOME_ROLE_TREE, "ROLE_TREE", "Role"},
+    {GOOME_ROLE_PROGRESS, "ROLE_PROGRESS", "Role"},
+    {GOOME_ROLE_IMAGE, "ROLE_IMAGE", "Role"},
+    {GOOME_ROLE_GROUP, "ROLE_GROUP", "Role"},
+    {GOOME_ROLE_DIALOG, "ROLE_DIALOG", "Role"},
+    {GOOME_A11Y_FOCUSED, "A11Y_FOCUSED", "A11yState"},
+    {GOOME_A11Y_CHECKED, "A11Y_CHECKED", "A11yState"},
+    {GOOME_A11Y_DISABLED, "A11Y_DISABLED", "A11yState"},
+    {GOOME_A11Y_EXPANDED, "A11Y_EXPANDED", "A11yState"},
+    {GOOME_A11Y_SELECTED, "A11Y_SELECTED", "A11yState"},
     {GOOME_PRESET_DARK, "PRESET_DARK", "Preset"},
     {GOOME_PRESET_LIGHT, "PRESET_LIGHT", "Preset"},
     {GOOME_PRESET_MIDNIGHT, "PRESET_MIDNIGHT", "Preset"},

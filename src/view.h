@@ -44,11 +44,17 @@ struct gd_view {
     double scale, pixel_scale;
     int redraw_every_frame, take_keyboard, sync_clipboard, light_theme;
     int shape, wants, sticky, buttons, pressed_on_ui, inside, check_clip;
+    int fixed_step, a11y, ime_active;
+    goome_rect ime_at;
     double mx, my;
     char *clip;
     gd_slot *slots;
     int nslots, capslots;
 };
+
+int gd_goome_ime(goome *g, goome_rect *caret);
+int gd_goome_ime_push(goome *g, int type, const char *s, int cursor);
+void gd_goome_fixed_time(goome_ui *u, int on);
 
 gd_ui *ui_make(gd_view *v);
 void ui_drop(gd_ui *ui);

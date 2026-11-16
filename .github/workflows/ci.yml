@@ -61,6 +61,8 @@ jobs:
           out=$("godot/${{ matrix.bin }}" --headless --path example --quit-after 120 2>&1)
           out+=$("godot/${{ matrix.bin }}" --headless --path example res://custom.tscn --quit-after 120 2>&1)
           out+=$("godot/${{ matrix.bin }}" --headless --path example res://skinned.tscn --quit-after 120 2>&1)
+          out+=$("godot/${{ matrix.bin }}" --headless --path example res://anim.tscn --quit-after 120 2>&1)
+          out+=$("godot/${{ matrix.bin }}" --headless --path example res://text.tscn --quit-after 120 2>&1)
           echo "$out"
           ! echo "$out" | grep -q "SCRIPT ERROR\|^ERROR"
       - uses: actions/upload-artifact@v4

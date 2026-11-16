@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "view.h"
@@ -12,6 +13,7 @@ enum {
     N_MOUSE_EXIT = 42,
     N_WINDOW_FOCUS_IN = 1004,
     N_WINDOW_FOCUS_OUT = 1005,
+    N_IME_UPDATE = 2013,
 };
 
 enum {
@@ -145,11 +147,112 @@ static void open_goome(gd_view *v)
         return;
     }
     if (v->light_theme) goome_ui_theme_light(goome_ui_theme(v->u));
+    if (v->fixed_step) gd_goome_fixed_time(v->u, 1);
+    if (v->a11y >= 0) goome_ui_a11y(v->u, v->a11y);
     v->dirty = 1;
+}
+
+static void display_server(gd_var *out);
+
+static int64_t window_id(gd_view *v)
+{
+    gd_var w, r;
+    gd_call(&v->me, "get_window", &w, 0);
+    int64_t id = 0;
+    if (gd_as_obj(&w)) {
+        gd_call(&w, "get_window_id", &r, 0);
+        id = gd_as_int(&r);
+        gd.destroy(&r);
+    }
+    gd.destroy(&w);
+    return id;
+}
+
+static void ime_set(gd_view *v, int on)
+{
+    gd_var ds, a, id;
+    display_server(&ds);
+    gd_var_bool(&a, on);
+    gd_var_int(&id, window_id(v));
+    gd_call(&ds, "window_set_ime_active", NULL, 2, &a, &id);
+    gd.destroy(&a);
+    gd.destroy(&id);
+    gd.destroy(&ds);
+    v->ime_active = on;
+    v->ime_at = (goome_rect){-1, -1, -1, -1};
+}
+
+static void ime_place(gd_view *v, goome_rect r)
+{
+    gd_var t, ds, p, id;
+    gd_call(&v->me, "get_global_transform_with_canvas", &t, 0);
+    gd_xform2 m = gd_as_xform2(&t);
+    gd.destroy(&t);
+    double x = r.x, y = r.y + r.h;
+    display_server(&ds);
+    gd_var_vec2i(&p, (int)(m.m[0] * x + m.m[2] * y + m.m[4]), (int)(m.m[1] * x + m.m[3] * y + m.m[5]));
+    gd_var_int(&id, window_id(v));
+    gd_call(&ds, "window_set_ime_position", NULL, 2, &p, &id);
+    gd.destroy(&p);
+    gd.destroy(&id);
+    gd.destroy(&ds);
+    v->ime_at = r;
+}
+
+static void ime_sync(gd_view *v)
+{
+    goome_rect r;
+    int on = v->g && v->take_keyboard && gd_goome_ime(v->g, &r);
+    if (on != v->ime_active) ime_set(v, on);
+    if (on && memcmp(&r, &v->ime_at, sizeof(r))) ime_place(v, r);
+}
+
+static int utf8_at(const char *s, int64_t chars)
+{
+    int i = 0;
+    for (; s[i] && chars > 0; chars--) {
+        i++;
+        while (((unsigned char)s[i] & 0xC0) == 0x80) i++;
+    }
+    return i;
+}
+
+static void ime_update(gd_view *v)
+{
+    if (!v->g || !v->ime_active) return;
+    gd_var ds, t, sel;
+    display_server(&ds);
+    gd_call(&ds, "ime_get_text", &t, 0);
+    gd_call(&ds, "ime_get_selection", &sel, 0);
+    gd.destroy(&ds);
+    char *s = gd_as_cstr(&t);
+    gd_vec2i at = gd_as_vec2i(&sel);
+    gd.destroy(&t);
+    gd.destroy(&sel);
+    if (!s) return;
+    gd_goome_ime_push(v->g, GOOME_PREEDIT, s, utf8_at(s, at.x));
+    free(s);
+    v->dirty = 1;
+}
+
+static void ime_signal(gd_view *v, const goome_event *ev)
+{
+    gd_var sig, t, c;
+    gd_var_sn(&sig, ev->type == GOOME_TEXT ? "ime_text" : "ime_preedit");
+    const char *s = goome_event_text(v->g);
+    int64_t chars = 0;
+    for (int i = 0; s[i] && i < ev->id; i++) chars += ((unsigned char)s[i] & 0xC0) != 0x80;
+    gd_var_cstr(&t, s);
+    gd_var_int(&c, chars);
+    gd_call(&v->me, "emit_signal", NULL, ev->type == GOOME_TEXT ? 2 : 3, &sig, &t, &c);
+    gd.destroy(&sig);
+    gd.destroy(&t);
+    gd.destroy(&c);
 }
 
 static void close_goome(gd_view *v)
 {
+    if (v->ime_active) ime_set(v, 0);
     if (v->u) goome_ui_free(v->u);
     if (v->g) goome_close(v->g);
     v->u = NULL, v->g = NULL;
@@ -305,10 +408,12 @@ static void tick(gd_view *v)
     }
     goome_event ev;
     while (goome_poll(v->g, &ev, 0) > 0) {
+        if (ev.type == GOOME_TEXT || ev.type == GOOME_PREEDIT) ime_signal(v, &ev);
         goome_ui_feed(v->u, &ev);
         v->dirty = 1;
     }
     if (v->dirty || v->redraw_every_frame || goome_ui_animating(v->u)) render(v);
+    ime_sync(v);
     v->wants = goome_ui_wants(v->u);
     goome_event far;
     memset(&far, 0, sizeof(far));
@@ -473,6 +578,13 @@ static void gui_input(gd_view *v, gd_var *ev)
         int64_t kc = get_int(ev, "get_keycode");
         if (!kc) kc = get_int(ev, "get_physical_keycode");
         uint32_t uc = (uint32_t)get_int(ev, "get_unicode");
+        if (!kc && uc >= 32 && uc != 127) {
+            char t[8];
+            utf8_of(uc, t);
+            gd_goome_ime_push(v->g, GOOME_TEXT, t, 0);
+            v->dirty = 1;
+            return;
+        }
         int key = key_of(kc);
         char text[8] = {0};
         int combo = (mods & (GOOME_CTRL | GOOME_ALT | GOOME_SUPER)) != 0;
@@ -562,6 +674,7 @@ static void notify(GDExtensionClassInstancePtr inst, int32_t what, GDExtensionBo
         v->inside = 0;
         if (!v->buttons) push(v, GOOME_MOTION, -100000, -100000, 0, 0, 0, 0, NULL);
         break;
+    case N_IME_UPDATE: ime_update(v); break;
     case N_WINDOW_FOCUS_IN:
     case N_WINDOW_FOCUS_OUT:
         if (v->g) {
@@ -616,7 +729,7 @@ static GDExtensionObjectPtr view_create(void *ud, GDExtensionBool post)
     gd.nil(&v->tex);
     gd.nil(&v->mat);
     v->redraw_every_frame = 1, v->take_keyboard = 1, v->sync_clipboard = 1;
-    v->shape = -1;
+    v->shape = -1, v->a11y = -1;
     v->ui = ui_make(v);
     if (v->ui) gd_var_obj(&v->uivar, v->ui->obj);
     else gd.nil(&v->uivar);
@@ -626,6 +739,7 @@ static GDExtensionObjectPtr view_create(void *ud, GDExtensionBool post)
 static void view_free(void *ud, GDExtensionClassInstancePtr inst)
 {
     gd_view *v = inst;
+    v->ime_active = 0;
     close_goome(v);
     gd.destroy(&v->img);
     gd.destroy(&v->part);
@@ -710,6 +824,71 @@ static void m_push_text(void *inst, gd_args *a, gd_var *ret)
     }
 }
 
+static void m_push_key(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    int key = (int)gd_as_int(a->v[0]), mods = (int)gd_as_int(a->v[1]);
+    char t[2] = {0, 0};
+    if (key >= 32 && key < 127 && !(mods & (GOOME_CTRL | GOOME_ALT | GOOME_SUPER))) t[0] = (char)key;
+    push(v, GOOME_KEY, v->mx, v->my, 0, 0, key, mods, t[0] ? t : NULL);
+}
+
+static void m_push_ime_text(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    if (v->g && a->s[0][0]) gd_goome_ime_push(v->g, GOOME_TEXT, a->s[0], 0);
+    v->dirty = 1;
+}
+
+static void m_push_preedit(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    int64_t c = gd_as_int(a->v[1]);
+    if (v->g) gd_goome_ime_push(v->g, GOOME_PREEDIT, a->s[0], c < 0 ? (int)strlen(a->s[0]) : utf8_at(a->s[0], c));
+    v->dirty = 1;
+}
+
+static void m_is_ime_active(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    rb(ret, v->g && gd_goome_ime(v->g, NULL));
+}
+
+static void m_get_ime_caret(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    goome_rect r = {0, 0, 0, 0};
+    if (v->g) gd_goome_ime(v->g, &r);
+    gd.destroy(ret);
+    gd_var_rect2(ret, (gd_rect2){(float)r.x, (float)r.y, (float)r.w, (float)r.h});
+}
+
+static void m_a11y_action(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    if (!v->g) return;
+    goome_event e;
+    memset(&e, 0, sizeof(e));
+    e.type = GOOME_CONTROL;
+    int64_t id = gd_as_int(a->v[1]);
+    snprintf(e.msg, sizeof(e.msg), "a11y %s %u%s%s", a->s[0], (unsigned)id, a->s[2][0] ? " " : "", a->s[2]);
+    goome_push(v->g, &e);
+    v->dirty = 1;
+}
+
+static void set_fixed_step(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    v->fixed_step = gd_as_bool(a->v[0]);
+    if (v->u) gd_goome_fixed_time(v->u, v->fixed_step);
+}
+
+static void get_fixed_step(void *inst, gd_args *a, gd_var *ret)
+{
+    V;
+    rb(ret, v->fixed_step);
+}
+
 #define FLAG(name, field)                                                \
     static void set_##name(void *inst, gd_args *a, gd_var *ret)         \
     {                                                                    \
@@ -771,6 +950,14 @@ static gd_method methods[] = {
     VM0("wants_keyboard", m_wants_keyboard, T_BOOL),
     VM("hit", m_hit, T_BOOL, {"position", T_VEC2, NULL, NULL}),
     VM("push_text", m_push_text, T_VOID, {"text", T_STRING, NULL, NULL}),
+    VM("push_key", m_push_key, T_VOID, {"key", T_INT, NULL, NULL}, {"mods", T_INT, "0", NULL}),
+    VM("push_ime_text", m_push_ime_text, T_VOID, {"text", T_STRING, NULL, NULL}),
+    VM("push_preedit", m_push_preedit, T_VOID, {"text", T_STRING, NULL, NULL}, {"caret", T_INT, "-1", NULL}),
+    VM0("is_ime_active", m_is_ime_active, T_BOOL),
+    VM0("get_ime_caret", m_get_ime_caret, T_RECT2),
+    VM("a11y_action", m_a11y_action, T_VOID, {"action", T_STRING, NULL, NULL}, {"id", T_INT, NULL, NULL}, {"text", T_STRING, "", NULL}),
+    VM("set_fixed_step", set_fixed_step, T_VOID, {"on", T_BOOL, NULL, NULL}),
+    VM0("get_fixed_step", get_fixed_step, T_BOOL),
     VM("set_redraw_every_frame", set_redraw_every_frame, T_VOID, {"on", T_BOOL, NULL, NULL}),
     VM0("get_redraw_every_frame", get_redraw_every_frame, T_BOOL),
     VM("set_take_keyboard", set_take_keyboard, T_VOID, {"on", T_BOOL, NULL, NULL}),
@@ -800,5 +987,10 @@ void view_register(void)
     gd_register_prop("GoomeView", "sync_clipboard", T_BOOL, "set_sync_clipboard", "get_sync_clipboard");
     gd_register_prop("GoomeView", "light_theme", T_BOOL, "set_light_theme", "get_light_theme");
     gd_register_prop("GoomeView", "pixel_scale", T_FLOAT, "set_pixel_scale", "get_pixel_scale");
+    gd_register_prop("GoomeView", "fixed_step", T_BOOL, "set_fixed_step", "get_fixed_step");
     gd_register_signal("GoomeView", "goome_frame", "ui", "GoomeUI");
+    static const char *const text_args[] = {"text"}, *const pre_args[] = {"text", "caret"};
+    static const int text_types[] = {T_STRING}, pre_types[] = {T_STRING, T_INT};
+    gd_register_signal_args("GoomeView", "ime_text", 1, text_args, text_types);
+    gd_register_signal_args("GoomeView", "ime_preedit", 2, pre_args, pre_types);
 }

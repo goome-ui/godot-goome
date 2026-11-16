@@ -66,6 +66,7 @@ enum {
     T_SN = GDEXTENSION_VARIANT_TYPE_STRING_NAME,
     T_OBJECT = GDEXTENSION_VARIANT_TYPE_OBJECT,
     T_DICT = GDEXTENSION_VARIANT_TYPE_DICTIONARY,
+    T_ARRAY = GDEXTENSION_VARIANT_TYPE_ARRAY,
     T_BYTES = GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY,
     T_FLOATS = GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,
     T_DOUBLES = GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT64_ARRAY,
@@ -154,6 +155,8 @@ int gd_vec2s(const gd_var *v, double **xy);
 void gd_doubles_var(gd_var *v, const double *x, int n);
 void gd_dict_var(gd_var *v);
 void gd_dict_put(gd_var *d, const char *key, gd_var *val);
+void gd_array_var(gd_var *v);
+void gd_array_push(gd_var *a, gd_var *val);
 
 int gd_call(gd_var *self, const char *method, gd_var *ret, int n, ...);
 GDExtensionObjectPtr gd_new(const char *cls);
@@ -199,6 +202,7 @@ void gd_register_methods(const char *cls, gd_method *m);
 void gd_register_consts(const char *cls, const gd_const *c);
 void gd_register_prop(const char *cls, const char *name, int type, const char *setter, const char *getter);
 void gd_register_signal(const char *cls, const char *name, const char *arg, const char *arg_cls);
+void gd_register_signal_args(const char *cls, const char *name, int n, const char *const *args, const int *types);
 
 void ui_register(void);
 void view_register(void);
