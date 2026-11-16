@@ -217,6 +217,74 @@ Dont override <code>_gui_input</code>, <code>_has_point</code> or <code>_input</
 </details>
 
 <details>
+<summary align="center"><b>🌀 Animations 🌀</b></summary>
+
+<br>
+
+<p align="center">
+<code>ui.anim(id, target, ms, ease)</code> gives back a number that slides toward <code>target</code>. goome remembers it per id, so you just ask for where you want it every frame and it gets there by itself. <code>anim_color</code> does the same with a Color:
+</p>
+
+```gdscript
+func _goome_frame(ui: GoomeUI) -> void:
+	var it := ui.custom("card", 200, 80)
+	var lift := ui.anim("lift", 1.0 if it.hovered else 0.0, 160, GoomeUI.EASE_OUT)
+	var col := ui.anim_color("col", Color.HOT_PINK if it.hovered else Color.DIM_GRAY, 300, GoomeUI.EASE_IN_OUT)
+	ui.draw_rect(Rect2(it.x, it.y - lift * 4, it.w, it.h), col, 12.0)
+```
+
+<p align="center">
+Eases are <code>EASE_LINEAR</code>, <code>EASE_IN</code>, <code>EASE_OUT</code>, <code>EASE_IN_OUT</code>, <code>EASE_SMOOTH</code>, <code>EASE_BACK</code>, <code>EASE_SPRING</code> and <code>EASE_BOUNCE</code>. Spring and back go a bit past the target on purpose. <code>ui.ease(ease, t)</code> gives you the raw curve if you want to do your own thing, and <code>ui.animating()</code> says if something is still moving.<br> <br>
+<code>fixed_step</code> on the view makes every frame exactly 16 ms, so recordings and tests come out the same every time. <code>example/anim.tscn</code> shows all of them.
+</p>
+</details>
+
+<details>
+<summary align="center"><b>🈳 IME 🈳</b></summary>
+
+<br>
+
+<p align="center">
+Chinese, Japanese, Korean and anything else that types through an IME just works in goome inputs and text edits. When a goome box gets focus the view turns on Godot's IME with <code>DisplayServer.window_set_ime_active</code> and moves the candidate window to the caret, and it turns it off again when the box loses focus.<br> <br>
+While you're composing, the text Godot sends with <code>NOTIFICATION_OS_IME_UPDATE</code> goes into goome as preedit, so its drawn underlined right at the caret. When you commit, the text goes in as one undo step. Keys with no keycode but a unicode (thats how Godot hands over finished IME text) go in the same way.<br> <br>
+If you want to see it yourself, the view has the <code>ime_text(text)</code> and <code>ime_preedit(text, caret)</code> signals, plus <code>is_ime_active()</code> and <code>get_ime_caret()</code>. <code>push_ime_text(text)</code> and <code>push_preedit(text, caret)</code> feed it from code, handy for tests or your own input.
+</p>
+</details>
+
+<details>
+<summary align="center"><b>♿ Accessibility ♿</b></summary>
+
+<br>
+
+<p align="center">
+goome builds a tree of every widget (role, label, value, state and rect) each frame. Its off by default in here, turn it on once with <code>ui.a11y(true)</code> and read it with <code>ui.a11y_tree()</code>. You get an Array of Dictionaries with <code>role</code>, <code>parent</code>, <code>states</code>, <code>rect</code>, <code>label</code>, <code>value</code>, <code>id</code>, <code>num</code>, <code>min</code>, <code>max</code> and <code>caret</code>, so you can hand it to whatever screen reader bridge your game uses:
+</p>
+
+```gdscript
+for n in $GoomeView.get_ui().a11y_tree():
+	if n.role == GoomeUI.ROLE_BUTTON:
+		print(n.label, " at ", n.rect)
+```
+
+<p align="center">
+Roles are the <code>GoomeUI.ROLE_*</code> constants and states are the <code>A11Y_*</code> bits (focused, checked, disabled, expanded, selected). For your own <code>custom</code> items call <code>ui.a11y_role(GoomeUI.ROLE_BUTTON, "Knob")</code> and <code>ui.a11y_value("11")</code> right before them.<br> <br>
+To do something from the other side, call <code>a11y_action("press", id)</code> on the view. <code>"set"</code> takes a text too (<code>a11y_action("set", id, "7.5")</code>), and theres <code>"expand"</code> and <code>"focus"</code>. The widgets react like it was a click.
+</p>
+</details>
+
+<details>
+<summary align="center"><b>😀 Emoji And RTL 😀</b></summary>
+
+<br>
+
+<p align="center">
+Text draws color emoji (COLR, CBDT and sbix fonts) with skin tones and ZWJ sequences, plus Arabic and Hebrew with proper right to left order and joined Arabic letters. The default font already pulls in the system emoji font, so most of the time you dont do anything.<br> <br>
+<code>ui.text_dir(GoomeUI.DIR_RTL)</code> forces the direction for all text, <code>DIR_LTR</code> too, and <code>DIR_AUTO</code> (the default) picks it per line from the first real letter. If your font is missing stuff, give it a fallback with <code>ui.font_fallback(font, other)</code>. Both can be a FontFile, a system font name or the raw bytes of a ttf, and <code>null</code> as the first one means the theme font. <code>draw_text</code> and <code>text_size</code> take a font as the last argument too.<br> <br>
+<code>example/text.tscn</code> has emoji, Arabic, Hebrew and mixed lines, plus a box and an editor to type in.
+</p>
+</details>
+
+<details>
 <summary align="center"><b>🔧 The Node 🔧</b></summary>
 
 <br>
@@ -231,7 +299,12 @@ Dont override <code>_gui_input</code>, <code>_has_point</code> or <code>_input</
 | `wants_mouse()` / `wants_keyboard()` | what goome wants right now |
 | `hit(position)` | does that local spot hit the ui |
 | `get_texture()` / `get_image()` | the ImageTexture it draws, and the Image behind it, if you want the ui on a mesh or a screenshot |
-| `push_text(text)` | type text into the focused box from code |
+| `push_text(text)` / `push_key(key, mods)` | type text or press a key in the focused box from code |
+| `fixed_step` | every frame moves the ui clock exactly 16 ms instead of real time, for tests and recordings |
+| `push_ime_text(text)` / `push_preedit(text, caret)` | send IME text from code |
+| `is_ime_active()` / `get_ime_caret()` | if goome wants the IME right now and where its caret is |
+| `a11y_action(action, id, text)` | press, set, expand or focus a widget from the a11y tree |
+| `ime_text(text)` / `ime_preedit(text, caret)` | signals for IME text coming in |
 | `goome_frame(ui)` | the signal, every frame goome draws |
 
 <p align="center">
@@ -288,7 +361,7 @@ Only normal single precision Godot builds, not the double precision ones.
 <br>
 
 <p align="center">
-The test is a real Godot project in <code>tests/project</code> that runs headless. It clicks a button, drags a slider off the ui, types into a box and clicks next to the window, and checks the game got exactly the input it should have and the frame got drawn. It also draws a window full of custom icons and skins and checks the pixels hash the same as <code>tests/icons.c</code> does in plain C:
+The test is a real Godot project in <code>tests/project</code> that runs headless. It clicks a button, drags a slider off the ui, types into a box and clicks next to the window, and checks the game got exactly the input it should have and the frame got drawn. It also draws a window full of custom icons and skins and checks the pixels hash the same as <code>tests/icons.c</code> does in plain C. The animation frames, emoji and RTL text, IME preedit and the a11y tree get checked against the same hashes and values c-goome's own unit test has:
 </p>
 
 ```sh
