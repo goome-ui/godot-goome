@@ -174,6 +174,11 @@ func run() -> void:
 	await custom_widgets()
 	await icon_hashes()
 	await anything()
+	consts05()
+	await anims()
+	await emoji_rtl()
+	await ime()
+	await a11y()
 	finish()
 
 
@@ -510,6 +515,197 @@ func anything() -> void:
 	v.buf = "abc"
 	await frames(6)
 	check(argb_fnv(v.get_image()) != pw[0], "a # mask draws different")
+	v.queue_free()
+	view = null
+
+
+func fresh(script: Script, at: Vector2) -> GoomeView:
+	if view:
+		view.queue_free()
+	view = script.new()
+	add_child(view)
+	view.position = Vector2.ZERO
+	view.size = at
+	move(Vector2(-1000, -1000))
+	return view
+
+
+func until(what: Callable, most: int) -> void:
+	for i in most:
+		if what.call():
+			return
+		await frames(1)
+
+
+func consts05() -> void:
+	check(GoomeUI.EASE_SMOOTH == 0 and GoomeUI.EASE_CUSTOM == 5 and GoomeUI.EASE_IN == 6 and GoomeUI.EASE_SPRING == 7 and GoomeUI.EASE_BOUNCE == 8, "ease constants match goome.h")
+	check(GoomeUI.DIR_AUTO == 0 and GoomeUI.DIR_LTR == 1 and GoomeUI.DIR_RTL == 2, "text dir constants match goome.h")
+	check(GoomeUI.ROLE_NONE == 0 and GoomeUI.ROLE_WINDOW == 1 and GoomeUI.ROLE_INPUT == 7 and GoomeUI.ROLE_MENUITEM == 13 and GoomeUI.ROLE_PROGRESS == 16 and GoomeUI.ROLE_DIALOG == 19, "role constants match goome.h")
+	check(GoomeUI.A11Y_FOCUSED == 1 and GoomeUI.A11Y_CHECKED == 2 and GoomeUI.A11Y_DISABLED == 4 and GoomeUI.A11Y_EXPANDED == 8 and GoomeUI.A11Y_SELECTED == 16, "a11y state constants match goome.h")
+
+
+func anims() -> void:
+	var ui := GoomeUI.new()
+	check(ui.ease(GoomeUI.EASE_LINEAR, 0.25) == 0.25 and ui.ease(GoomeUI.EASE_IN, 0.5) == 0.125 and ui.ease(GoomeUI.EASE_OUT, 0.5) == 0.875, "ease linear in out")
+	check(ui.ease(GoomeUI.EASE_IN_OUT, 0.25) == 0.0625 and ui.ease(GoomeUI.EASE_IN_OUT, 0.75) == 0.9375 and ui.ease(GoomeUI.EASE_SMOOTH, 0.5) == 0.5, "ease in_out smooth")
+	check(ui.ease(GoomeUI.EASE_BOUNCE, 0.25) == 0.47265625 and ui.ease(GoomeUI.EASE_OUT, -3) == 0 and ui.ease(GoomeUI.EASE_IN, 7) == 1, "ease bounce and clamping")
+	var peak := 0.0
+	for i in range(1, 100):
+		peak = maxf(peak, ui.ease(GoomeUI.EASE_SPRING, i / 100.0))
+	check(peak > 1.1 and peak < 1.25, "spring overshoots a bit (%.3f)" % peak)
+	ui.free()
+	var v := fresh(preload("res://anim.gd"), Vector2(300, 200))
+	await until(func() -> bool: return v.final_last >= 0, 4000)
+	var lg: Array = v.log
+	check(lg.size() >= 66, "anim ran (%d frames logged)" % lg.size())
+	if lg.size() < 66:
+		return
+	check(lg[0].box == 10 and lg[0].sp == 0 and lg[0].col.to_argb32() == 0 and lg[0].last == 0, "anims start at the target")
+	check(not lg[1].animating, "nothing moves before the switch")
+	var over := 0.0
+	var moving := 0
+	var up := true
+	for i in 60:
+		var f: Dictionary = lg[i + 2]
+		over = maxf(over, f.sp)
+		up = up and f.box >= lg[i + 1].box
+		if f.animating:
+			moving = i + 1
+	check(up, "box only goes up")
+	check(lg[61].box == 200 and lg[61].sp == 1 and lg[61].col.to_argb32() == 0xFF20D060 and lg[61].last == 5, "anims land on the target")
+	check(over > 1.05 and moving >= 19 and moving <= 22 and not lg[61].animating, "spring overshoots and it all stops (%.3f, %d)" % [over, moving])
+	var m: int = lg[8].col.to_argb32()
+	check((m >> 24) > 0x70 and (m >> 24) < 0x90 and ((m >> 8) & 255) == 0xD0 and ((m >> 16) & 255) == 0x20, "anim_color fades the alpha (%08x)" % m)
+	check(lg[62].animating and lg[62].box == 200 and lg[63].box < 200 and lg[63].box > 10, "going back starts moving")
+	check(lg[64].box < 200 and lg[64].animating, "flipping again mid way")
+	check(v.final_last == 0, "a dropped anim starts fresh")
+	var got := ["%08x" % lg[3].hash, "%08x" % lg[6].hash, "%08x" % lg[10].hash, "%08x" % lg[61].hash]
+	print("anim hashes ", got)
+	check(got == ["0226f2f5", "906d3ce5", "db5848ad", "12bea72d"], "anim frame hashes match c")
+
+
+func near(a: float, b: float) -> bool:
+	return absf(a - b) < 0.01
+
+
+func emoji_rtl() -> void:
+	var v := fresh(preload("res://text.gd"), Vector2(400, 120))
+	await until(func() -> bool: return v.hashes.size() >= v.jobs.size(), 200)
+	var z: Dictionary = v.sizes
+	check(near(z.tone, 24) and near(z.zwj, 24) and near(z.heart, 18) and near(z.heart_vs, 24), "emoji sequences measure like c (%s)" % z)
+	check(near(z.goome, z.goome_plain + 16), "fallback font fills in the emoji")
+	check(near(z.arab_short, 93.2), "arabic forms measure like c (%.2f)" % z.arab_short)
+	var c: Color = v.mid
+	check(c.a8 == 255 and c.r8 > 200 and c.g8 > 100 and c.g8 < 210 and c.b8 < 120, "cbdt cat is orange in the middle (%s)" % c)
+	var h: Array = v.hashes
+	print("emoji rtl hashes ", h)
+	check(h[4] != h[3] and h[5] == h[3] and h[7] != h[6], "rtl and ltr and shaping change the pixels")
+	var got := [h[0], h[1], h[2], h[3], h[4], h[6]]
+	check(got == ["3bab3875", "85fe883a", "d3add387", "b79518dd", "49a72d7d", "469719e1"], "emoji and rtl hashes match c")
+
+
+func ime_run(in_text: String, ed_text: String, focus: int, actions: Array) -> GoomeView:
+	var v := fresh(preload("res://ime.gd"), Vector2(300, 200))
+	v.in_text = in_text
+	v.ed_text = ed_text
+	v.focus = focus
+	v.actions = actions
+	var want := actions.size() + 3
+	await until(func() -> bool: return v.log.size() > want, 200)
+	return v
+
+
+func ime() -> void:
+	var v := await ime_run("ab", "", 1, [["pre", "xyz", 1], ["pre", "xyz", 3], ["pre", "", 0], ["text", "日本"], ["key", 99, 0], ["key", 122, GoomeUI.MOD_CTRL], ["key", 122, GoomeUI.MOD_CTRL], ["key", 97, GoomeUI.MOD_CTRL], ["text", "é"], ["key", 122, GoomeUI.MOD_CTRL]])
+	var lg: Array = v.log
+	var h := [lg[1].hash, lg[2].hash, lg[3].hash]
+	check(h[0] != h[1] and h[1] != h[2] and lg[3].in == "ab", "preedit draws without touching the text")
+	check(lg[4].hash == h[0], "empty preedit puts it back")
+	check(lg[5].in == "ab日本" and lg[6].in == "ab日本c", "committed text goes in (%s)" % lg[6].in)
+	check(lg[7].in == "ab日本" and lg[8].in == "ab日本c", "undo and redo (%s %s)" % [lg[7].in, lg[8].in])
+	check(lg[10].in == "é" and lg[11].in == "ab日本c", "commit over a selection undoes in one go (%s %s)" % [lg[10].in, lg[11].in])
+	check(v.preedits.size() >= 3 and v.preedits[0] == ["xyz", 1] and v.preedits[1] == ["xyz", 3] and v.texts.has("日本"), "ime_preedit and ime_text signals (%s)" % [v.preedits])
+	v = await ime_run("", "line", 2, [["pre", "kana", 2], ["pre", "", 0], ["text", "かな\n"], ["key", 122, GoomeUI.MOD_CTRL]])
+	lg = v.log
+	var edh: String = lg[2].hash
+	check(edh != lg[1].hash, "text_edit draws the preedit")
+	check(lg[4].ed == "かな\nline" and lg[4].in == "", "text_edit takes the commit (%s)" % lg[4].ed)
+	check(lg[5].ed == "line", "and undoes it")
+	print("ime hashes ", h, " ", edh)
+	check(h[1] == "2e20540f" and h[2] == "ceafcbad" and edh == "c9c1add5", "preedit hashes match c")
+	v = await ime_run("", "", 1, [["flags", GoomeUI.INPUT_NUMBER], ["text", "1a2.5"]])
+	check(v.log[3].in == "12.5", "number input filters committed text (%s)" % v.log[3].in)
+
+	v = await ime_run("", "", 1, [])
+	await frames(2)
+	check(v.is_ime_active(), "focused input turns the ime on")
+	var r: Rect2 = v.get_ime_caret()
+	check(r.position.x > 0 and r.position.y > 0 and r.size.y >= 14, "and puts the caret there (%s)" % r)
+	v.grab_focus()
+	for ch in "жё":
+		var e := InputEventKey.new()
+		e.unicode = ch.unicode_at(0)
+		e.pressed = true
+		Input.parse_input_event(e)
+	await frames(4)
+	check(v.in_text == "жё" and v.texts == ["ж", "ё"], "godot ime keys come in as text (%s %s)" % [v.in_text, v.texts])
+	click(Vector2(250, 190))
+	await frames(4)
+	check(not v.is_ime_active(), "clicking away turns the ime off")
+
+
+func node(tree: Array, role: int, label: String) -> int:
+	for i in tree.size():
+		if tree[i].role == role and tree[i].label == label:
+			return i
+	return -1
+
+
+func a11y() -> void:
+	var v := fresh(preload("res://a11y.gd"), Vector2(420, 700))
+	await frames(4)
+	var ui: GoomeUI = v.get_ui()
+	var t: Array = ui.a11y_tree()
+	check(t.size() > 15, "a11y tree has the widgets (%d)" % t.size())
+	if t.size() <= 15:
+		return
+	var app := node(t, GoomeUI.ROLE_WINDOW, "Demo")
+	var ok := node(t, GoomeUI.ROLE_BUTTON, "OK")
+	var dark := node(t, GoomeUI.ROLE_CHECKBOX, "Dark")
+	var vol := node(t, GoomeUI.ROLE_SLIDER, "Volume")
+	var nm := node(t, GoomeUI.ROLE_INPUT, "Name")
+	var fruit := node(t, GoomeUI.ROLE_COMBO, "Fruit")
+	var tree := node(t, GoomeUI.ROLE_TREE, "Folder")
+	var knob := node(t, GoomeUI.ROLE_BUTTON, "Knob")
+	var tab2 := node(t, GoomeUI.ROLE_TAB, "Two")
+	var big := node(t, GoomeUI.ROLE_RADIO, "Big")
+	check(app == 0 and t[app].parent == -1, "app window is the root")
+	check(ok > 0 and t[ok].parent == app and t[ok].rect.size.x > 0 and t[ok].rect.size.y > 0, "button sits in the app with a rect")
+	check(node(t, GoomeUI.ROLE_TEXT, "Hello there") > 0 and node(t, GoomeUI.ROLE_TEXT, "ready") > 0 and node(t, GoomeUI.ROLE_BUTTON, "Close") > 0, "labels, statusbar and titlebar buttons")
+	check(dark > 0 and not (t[dark].states & GoomeUI.A11Y_CHECKED) and big > 0, "checkbox and radio")
+	check(vol > 0 and t[vol].num == 2 and t[vol].min == 0 and t[vol].max == 10 and t[vol].value == "2.0", "slider value and range")
+	check(nm > 0 and t[nm].value == "Bo" and fruit > 0 and t[fruit].value == "Mango", "input and combo values")
+	check(tab2 > 0 and t[t[tab2].parent].role == GoomeUI.ROLE_GROUP and not (t[tab2].states & GoomeUI.A11Y_SELECTED), "tabs live in a group")
+	check(tree > 0 and not (t[tree].states & GoomeUI.A11Y_EXPANDED) and node(t, GoomeUI.ROLE_TEXT, "inside") < 0, "closed tree hides its kids")
+	check(knob > 0 and t[knob].value == "11", "a11y_role and a11y_value name a custom item")
+	for verb in [["press", ok, ""], ["press", dark, ""], ["press", big, ""], ["set", vol, "7.5"], ["set", nm, "hello there"], ["press", knob, ""], ["expand", tree, ""], ["press", tab2, ""]]:
+		v.a11y_action(verb[0], t[verb[1]].id, verb[2])
+	await frames(4)
+	check(v.ok == 1 and v.dark and v.mode == 1 and v.vol == 7.5 and v.name_text == "hello there" and v.custom_hits == 1 and v.tab == 1, "screen reader actions work the widgets")
+	t = ui.a11y_tree()
+	tree = node(t, GoomeUI.ROLE_TREE, "Folder")
+	var inside := node(t, GoomeUI.ROLE_TEXT, "inside")
+	check(tree > 0 and (t[tree].states & GoomeUI.A11Y_EXPANDED) and inside > 0 and t[inside].parent == tree, "expanded tree shows its kids")
+	dark = node(t, GoomeUI.ROLE_CHECKBOX, "Dark")
+	check(dark > 0 and (t[dark].states & GoomeUI.A11Y_CHECKED), "checkbox state follows")
+	v.a11y_action("focus", t[node(t, GoomeUI.ROLE_INPUT, "Name")].id)
+	await frames(4)
+	t = ui.a11y_tree()
+	nm = node(t, GoomeUI.ROLE_INPUT, "Name")
+	check(nm > 0 and (t[nm].states & GoomeUI.A11Y_FOCUSED) and t[nm].caret == 11, "focus action and caret (%s)" % (t[nm] if nm >= 0 else {}))
+	ui.a11y(false)
+	await frames(3)
+	check(ui.a11y_tree().is_empty(), "a11y off empties the tree")
 	v.queue_free()
 	view = null
 
