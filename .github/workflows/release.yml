@@ -35,3 +35,25 @@ jobs:
         run: |
           gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "goome ${TAG#v}" --notes "goome ${TAG#v}"
           gh release upload "$TAG" "godot-goome-${TAG#v}.zip" "godot-goome-${TAG#v}-assetlib.zip" --clobber
+
+  assetlib:
+    needs: upload
+    if: vars.ASSETLIB_ASSET_ID != ''
+    runs-on: ubuntu-latest
+    env:
+      ASSET_ID: ${{ vars.ASSETLIB_ASSET_ID }}
+      TAG: ${{ github.ref_name }}
+      REPO: ${{ github.repository }}
+      ASSETLIB_USER: ${{ secrets.ASSETLIB_USER }}
+      ASSETLIB_PASS: ${{ secrets.ASSETLIB_PASS }}
+    steps:
+      - name: send the new version to the asset library
+        run: |
+          api=https://godotengine.org/asset-library/api
+          token=$(curl -fsS -X POST "$api/login" -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg u "$ASSETLIB_USER" --arg p "$ASSETLIB_PASS" '{username:$u,password:$p}')" | jq -r .token)
+          test -n "$token" -a "$token" != null
+          url="https://github.com/$REPO/releases/download/$TAG/godot-goome-${TAG#v}-assetlib.zip"
+          curl -fsSIL "$url" > /dev/null
+          curl -fsS -X POST "$api/asset/$ASSET_ID" -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg t "$token" --arg v "${TAG#v}" --arg u "$url" '{token:$t,version_string:$v,download_commit:$u}')"

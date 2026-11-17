@@ -70,8 +70,8 @@ Put that script on a <code>GoomeView</code> that fills the screen (anchors Full 
 <br>
 
 <p align="center">
-The easy way: download <code>godot-goome-0.5.0.zip</code> from the <a href="https://github.com/goome-ui/godot-goome/releases">releases page</a> and unzip it into your project. You end up with <code>res://addons/goome/</code> with the libs for every OS already in <code>bin/</code>. Open the project and <code>GoomeView</code> shows up in the Add Node list.<br> <br>
-Every version gets its own zip on there, so for another one just pick its release. Building a version yourself is <code>git clone -b v0.5.0 https://github.com/goome-ui/godot-goome</code> and the steps below.<br> <br>
+The easy way: download <code>godot-goome-0.5.2.zip</code> from the <a href="https://github.com/goome-ui/godot-goome/releases">releases page</a> and unzip it into your project. You end up with <code>res://addons/goome/</code> with the libs for every OS already in <code>bin/</code>. Open the project and <code>GoomeView</code> shows up in the Add Node list.<br> <br>
+Every version gets its own zip on there, so for another one just pick its release. Building a version yourself is <code>git clone -b v0.5.2 https://github.com/goome-ui/godot-goome</code> and the steps below.<br> <br>
 Or build it yourself, you only need a C compiler (gcc or clang, mingw gcc for windows):
 </p>
 
