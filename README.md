@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <img src="https://goome-ui.github.io/docs/assets/badges/godot-44.svg" alt="Godot 4.4+">
-  <img src="https://goome-ui.github.io/docs/assets/badges/gdextension-plain-c.svg" alt="GDExtension in plain C">
+  <img src="https://goome.wtf/badges/godot-44.svg" alt="Godot 4.4+">
+  <img src="https://goome.wtf/badges/gdextension-plain-c.svg" alt="GDExtension in plain C">
   <img src="https://img.shields.io/badge/Linux-x86__64-1b1d22?style=flat-square&logo=linux&logoColor=white" alt="Linux">
   <img src="https://img.shields.io/badge/Windows-x86__64-1b1d22?style=flat-square&logo=windows11&logoColor=white" alt="Windows">
   <img src="https://img.shields.io/badge/macOS-arm64%20%2B%20x86__64-1b1d22?style=flat-square&logo=apple&logoColor=white" alt="macOS">
@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <a href="https://goome-ui.github.io/docs/">Docs</a> &nbsp;·&nbsp;
-  <a href="https://goome-ui.github.io/docs/builder/">Builder</a> &nbsp;·&nbsp;
+  <a href="https://goome.wtf/docs/">Docs</a> &nbsp;·&nbsp;
+  <a href="https://goome.wtf/builder/">Builder</a> &nbsp;·&nbsp;
   <a href="https://github.com/goome-ui/examples">Examples</a> &nbsp;·&nbsp;
   <a href="https://github.com/goome-ui/c-goome">C</a> &nbsp;·&nbsp;
   <a href="https://github.com/goome-ui/csharp-goome">C#</a> &nbsp;·&nbsp;
@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  To see what goome can do, grab one of the <a href="https://goome-ui.github.io/docs/downloads/">ready made apps</a>, like the HUD or the crosshair. To start your own, <code>goome new my-app --lang godot</code> from <a href="https://github.com/goome-ui/goome-cli">goome-cli</a> makes it from a <a href="https://goome-ui.github.io/docs/templates/">template</a>.<br>
+  To see what goome can do, grab one of the <a href="https://goome.wtf/docs/downloads/">ready made apps</a>, like the HUD or the crosshair. To start your own, <code>goome new my-app --lang godot</code> from <a href="https://github.com/goome-ui/goome-cli">goome-cli</a> makes it from a <a href="https://goome.wtf/docs/templates/">template</a>.<br>
   Questions go in <a href="https://github.com/goome-ui/c-goome/discussions">Discussions</a>. If you want to help, the <a href="https://github.com/goome-ui/godot-goome/labels/good%20first%20issue">good first issues</a> are small ones to start with.
 </p>
 
@@ -37,7 +37,7 @@
   goome draws offscreen into a texture, so it works with every renderer (Forward+, Mobile, Compatibility). Godot's mouse and keys get fed into it, and while the ui wants them your game doesnt see them. Clicks that miss the ui go straight through to the game.<br>
   It's a GDExtension written in plain C against Godot's own <code>gdextension_interface.h</code>, no godot-cpp, no C# needed.<br> <br>
   If you want a see-through overlay over the whole desktop, a normal app window or a mod for a game you didnt make, thats the other goome repos. <a href="https://github.com/goome-ui/c-goome">c-goome</a> is the main one, <a href="https://github.com/goome-ui/csharp-goome">csharp-goome</a> has the Unity mod templates and <a href="https://github.com/goome-ui/java-goome">java-goome</a> does Minecraft mods.<br>
-  The <a href="https://goome-ui.github.io/docs/builder/">ui builder</a> lets you click a ui together in the browser before you write any of it.
+  The <a href="https://goome.wtf/builder/">ui builder</a> lets you click a ui together in the browser before you write any of it.
 </p>
 
 <h3 align="center">🎮 A menu in 20 lines 🎮</h3>
@@ -159,10 +159,10 @@ Everything on <code>GoomeUI</code>, the thing you get in <code>_goome_frame(ui)<
 | `toast(text, ms)` / `statusbar(text)` | little popups and the status line |
 | `tooltip` `hovered` `focused` `set_focus` `push_id` `pop_id` | for the widget right before it, and ids for loops |
 | `changed()` | if the last widget changed its value this frame |
-| `theme_dark()` `theme_light()` `theme_set(name, value)` `theme_get(name)` | `ui.theme_set("accent", Color.ORANGE)`, `ui.theme_set("radius", 4.0)`. Names are the goome_theme fields: bg, panel, border, text, text_dim, accent, accent_text, hover, active, input_bg, shadow, radius, pad, gap, border_width, font_size, shadow_blur and anim_ms, the <a href="https://goome-ui.github.io/docs/">docs</a> have the rest |
+| `theme_dark()` `theme_light()` `theme_set(name, value)` `theme_get(name)` | `ui.theme_set("accent", Color.ORANGE)`, `ui.theme_set("radius", 4.0)`. Names are the goome_theme fields: bg, panel, border, text, text_dim, accent, accent_text, hover, active, input_bg, shadow, radius, pad, gap, border_width, font_size, shadow_blur and anim_ms, the <a href="https://goome.wtf/docs/">docs</a> have the rest |
 
 <p align="center">
-Same labels in a loop need <code>ui.push_id(str(i))</code> first, same as in C. Begin and end rules are the C ones, the <a href="https://goome-ui.github.io/docs/">docs</a> list which ends you always need.<br> <br>
+Same labels in a loop need <code>ui.push_id(str(i))</code> first, same as in C. Begin and end rules are the C ones, the <a href="https://goome.wtf/docs/">docs</a> list which ends you always need.<br> <br>
 The ui only works inside <code>_goome_frame</code> or the signal. Call it anywhere else and you get one error and nothing happens.
 </p>
 </details>
@@ -190,7 +190,7 @@ func _goome_frame(ui: GoomeUI) -> void:
 ```
 
 <p align="center">
-Fonts, icons, nine slice skins, your own widgets and the full list of theme names are all in the <a href="https://goome-ui.github.io/docs/">docs</a>. <code>example/custom.tscn</code>, <code>skinned.tscn</code> and <code>anything.tscn</code> are good ones to poke at too.
+Fonts, icons, nine slice skins, your own widgets and the full list of theme names are all in the <a href="https://goome.wtf/docs/">docs</a>. <code>example/custom.tscn</code>, <code>skinned.tscn</code> and <code>anything.tscn</code> are good ones to poke at too.
 </p>
 </details>
 
@@ -338,7 +338,7 @@ goome_cursor_shape(g);                        // what cursor to show
 ```
 
 <p align="center">
-Then draw one premultiplied alpha quad. The <a href="https://github.com/goome-ui/examples">goome-ui/examples</a> repo has small ones for raylib, SDL or love2d, and the <a href="https://goome-ui.github.io/docs/">docs</a> have a page per engine.<br> <br>
+Then draw one premultiplied alpha quad. The <a href="https://github.com/goome-ui/examples">goome-ui/examples</a> repo has small ones for raylib, SDL or love2d, and the <a href="https://goome.wtf/docs/">docs</a> have a page per engine.<br> <br>
 If you dont want to write that glue yourself, c-goome has ready made <a href="https://github.com/goome-ui/c-goome/tree/main/backends">backends</a> for dx9 up to dx12, vulkan, metal or opengl. Input glue for win32, glfw or sdl is in there too.
 </p>
 </details>
