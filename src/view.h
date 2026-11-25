@@ -48,7 +48,7 @@ struct gd_view {
     goome_rect ime_at;
     double mx, my;
     char *clip;
-    gd_slot *slots;
+    gd_slot **slots;
     int nslots, capslots;
 };
 

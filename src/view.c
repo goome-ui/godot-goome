@@ -50,19 +50,20 @@ gd_slot *view_slot(gd_view *v, int kind, const char *id, uint32_t seed, int *fre
 {
     uint32_t key = slot_hash(kind, id ? id : "", seed);
     for (int i = 0; i < v->nslots; i++)
-        if (v->slots[i].key == key && v->slots[i].kind == kind) {
+        if (v->slots[i]->key == key && v->slots[i]->kind == kind) {
             *fresh = 0;
-            v->slots[i].seen = v->frames;
-            return &v->slots[i];
+            v->slots[i]->seen = v->frames;
+            return v->slots[i];
         }
     if (v->nslots == v->capslots) {
         int cap = v->capslots ? v->capslots * 2 : 16;
-        gd_slot *s = realloc(v->slots, (size_t)cap * sizeof(*s));
-        if (!s) return NULL;
-        v->slots = s, v->capslots = cap;
+        gd_slot **n = realloc(v->slots, (size_t)cap * sizeof(*n));
+        if (!n) return NULL;
+        v->slots = n, v->capslots = cap;
     }
-    gd_slot *s = &v->slots[v->nslots++];
-    memset(s, 0, sizeof(*s));
+    gd_slot *s = calloc(1, sizeof(*s));
+    if (!s) return NULL;
+    v->slots[v->nslots++] = s;
     s->key = key, s->kind = kind, s->seen = v->frames;
     *fresh = 1;
     return s;
@@ -748,7 +749,10 @@ static void view_free(void *ud, GDExtensionClassInstancePtr inst)
     gd.destroy(&v->uivar);
     gd.destroy(&v->me);
     if (v->ui) ui_drop(v->ui);
-    for (int i = 0; i < v->nslots; i++) free(v->slots[i].buf);
+    for (int i = 0; i < v->nslots; i++) {
+        free(v->slots[i]->buf);
+        free(v->slots[i]);
+    }
     free(v->slots);
     free(v->clip);
     free(v);
