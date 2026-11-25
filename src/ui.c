@@ -953,7 +953,8 @@ static const goome_bitmap *bitmap_of(gd_ui *ui, const gd_var *v)
             gd_call(&copy, "get_data", &data, 0);
             gd_packed raw;
             gd.to[T_BYTES](&raw, &data);
-            uint8_t *p = gd.bytes_at(&raw, 0);
+            uint8_t *p = int_of(&data, "size") / 4 / w >= h ? gd.bytes_at(&raw, 0) : NULL;
+            if (!p) gd_err("goome: cant read the pixels of that image, a compressed one has to be decompressed first");
             uint32_t *argb = p ? malloc((size_t)w * h * 4) : NULL;
             for (int i = 0; argb && i < w * h; i++) argb[i] = (uint32_t)p[i * 4 + 3] << 24 | (uint32_t)p[i * 4] << 16 | (uint32_t)p[i * 4 + 1] << 8 | p[i * 4 + 2];
             if (argb) goome_bitmap_from_argb(argb, w, h, &a->bm);
