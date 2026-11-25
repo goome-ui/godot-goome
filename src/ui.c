@@ -145,11 +145,31 @@ static void w_radio(void *inst, gd_args *a, gd_var *ret)
     ri(ret, v);
 }
 
+static const char *num_format(const char *s)
+{
+    int n = 0;
+    for (const char *p = s; p && *p; p++) {
+        if (*p != '%') continue;
+        p++;
+        if (*p == '%') continue;
+        while (*p && strchr("-+ #0", *p)) p++;
+        while (*p >= '0' && *p <= '9') p++;
+        if (*p == '.')
+            do p++;
+            while (*p >= '0' && *p <= '9');
+        if (!*p || !strchr("eEfFgGaA", *p) || n++) {
+            gd_err("goome: the format has to be for one float like \"%.2f\", using the default");
+            return NULL;
+        }
+    }
+    return s;
+}
+
 static void w_slider(void *inst, gd_args *a, gd_var *ret)
 {
     UI;
     double v = F(1);
-    ui->changed = goome_ui_slider(u, S(0), &v, F(2), F(3), OPT(4)) != 0;
+    ui->changed = goome_ui_slider(u, S(0), &v, F(2), F(3), num_format(OPT(4))) != 0;
     rf(ret, v);
 }
 
@@ -584,7 +604,7 @@ static void w_drag_float(void *inst, gd_args *a, gd_var *ret)
 {
     UI;
     double v = F(1);
-    ui->changed = goome_ui_drag_float(u, S(0), &v, F(2), F(3), F(4), OPT(5)) != 0;
+    ui->changed = goome_ui_drag_float(u, S(0), &v, F(2), F(3), F(4), num_format(OPT(5))) != 0;
     rf(ret, v);
 }
 
@@ -600,7 +620,7 @@ static void w_number(void *inst, gd_args *a, gd_var *ret)
 {
     UI;
     double v = F(1);
-    ui->changed = goome_ui_number(u, S(0), &v, F(2), OPT(3)) != 0;
+    ui->changed = goome_ui_number(u, S(0), &v, F(2), num_format(OPT(3))) != 0;
     rf(ret, v);
 }
 
